@@ -1,11 +1,11 @@
 import type { XMRigConfig } from './types';
 
 export const ALGORITHMS = [
-  'rx/0', 'cn/r', 'cn/gpu', 'cn-heavy/0', 'cn-pico', 'argon2/chukwav2', 'astrobwt'
+  'rx/0', 'cn/r', 'cn/gpu', 'cn-heavy/0', 'cn-pico', 'argon2/chukwav2', 'astrobwt', 'rx/tari'
 ];
 
 export const COINS = [
-  'monero', 'zephyr', 'wowoneiro'
+  'monero', 'zephyr', 'wowoneiro', 'tari'
 ];
 
 export const DEFAULT_CONFIG: XMRigConfig = {

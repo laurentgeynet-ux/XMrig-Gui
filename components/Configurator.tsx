@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { XMRigConfig } from '../types';
-import { ALGORITHMS, COINS } from '../constants';
+import { ALGORITHMS, COINS, DEFAULT_CONFIG } from '../constants';
 import Input from './common/Input';
 import Select from './common/Select';
 import Toggle from './common/Toggle';
@@ -15,6 +15,14 @@ interface ConfiguratorProps {
 
 const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart }) => {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showFeedback = (message: string, type: 'success' | 'error') => {
+    setFeedback({ message, type });
+    setTimeout(() => {
+        setFeedback(null);
+    }, 3000);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -49,7 +57,6 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
     }
   };
   
-  // FIX: Implemented auto-detection for CPU threads, using Electron API if available.
   const handleAutoThreads = async () => {
     if (window.electronAPI) {
       try {
@@ -57,19 +64,66 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
         setConfig(prev => ({...prev, threads: threadCount}));
       } catch (err) {
         console.error("Error getting hardware concurrency:", err);
-        // Fallback if API fails
         const threadCount = navigator.hardwareConcurrency || 4;
         setConfig(prev => ({...prev, threads: threadCount}));
       }
     } else {
-      // Fallback for browser environment
       const threadCount = navigator.hardwareConcurrency || 4;
       setConfig(prev => ({...prev, threads: threadCount}));
     }
   }
 
+  const handleSave = async () => {
+    if (window.electronAPI) {
+      try {
+        const result = await window.electronAPI.saveConfig(JSON.stringify(config, null, 2));
+        showFeedback(result.message, result.success ? 'success' : 'error');
+      } catch (err) {
+        console.error("Save failed:", err);
+        showFeedback("An unexpected error occurred while saving.", 'error');
+      }
+    } else {
+      showFeedback('Save feature is only available in the desktop app.', 'error');
+    }
+  };
+
+  const handleLoad = async () => {
+    if (window.electronAPI) {
+      try {
+        const result = await window.electronAPI.loadConfig();
+        if (result.success && result.config) {
+          // Merge with defaults to ensure all keys are present if loading an old config
+          const loadedConfig = { ...DEFAULT_CONFIG, ...result.config };
+          setConfig(loadedConfig);
+          showFeedback('Configuration loaded successfully.', 'success');
+        } else if (result.message !== 'Load canceled.') {
+          showFeedback(result.message || 'Failed to load configuration.', 'error');
+        }
+      } catch (err) {
+        console.error("Load failed:", err);
+        showFeedback("An unexpected error occurred while loading.", 'error');
+      }
+    } else {
+      showFeedback('Load feature is only available in the desktop app.', 'error');
+    }
+  };
+
   return (
     <div className="space-y-8">
+       <div className="flex justify-end items-center gap-4 -mb-4">
+        {feedback && (
+          <span className={`text-sm transition-opacity duration-300 ${feedback.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+            {feedback.message}
+          </span>
+        )}
+        <Button onClick={handleSave} variant="secondary">
+          <i className="fas fa-save mr-2"></i> Save
+        </Button>
+        <Button onClick={handleLoad} variant="secondary">
+          <i className="fas fa-folder-open mr-2"></i> Load
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <Card title="Pool Connection" icon="fa-server">
           <Select

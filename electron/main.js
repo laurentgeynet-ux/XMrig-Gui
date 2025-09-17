@@ -1,8 +1,9 @@
 // electron/main.js
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('node:path');
 const { spawn } = require('child_process');
 const os = require('os');
+const fs = require('node:fs');
 
 // The built directory structure
 //
@@ -125,6 +126,53 @@ ipcMain.on('stop-mining', () => {
         xmrigProcess = null;
     }
 });
+
+// Handle saving configuration to a file
+ipcMain.handle('save-config', async (event, configData) => {
+  if (!win) return { success: false, message: 'Main window not available.' };
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Save XMRig Configuration',
+    defaultPath: 'xmrig-config.json',
+    filters: [{ name: 'JSON Files', extensions: ['json'] }],
+  });
+
+  if (canceled || !filePath) {
+    return { success: false, message: 'Save canceled.' };
+  }
+
+  try {
+    fs.writeFileSync(filePath, configData);
+    return { success: true, message: 'Configuration saved.' };
+  } catch (error) {
+    console.error('Failed to save config:', error);
+    return { success: false, message: `Error saving file: ${error.message}` };
+  }
+});
+
+// Handle loading configuration from a file
+ipcMain.handle('load-config', async () => {
+  if (!win) return { success: false, message: 'Main window not available.' };
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: 'Load XMRig Configuration',
+    filters: [{ name: 'JSON Files', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+
+  if (canceled || filePaths.length === 0) {
+    return { success: false, message: 'Load canceled.' };
+  }
+
+  try {
+    const filePath = filePaths[0];
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const config = JSON.parse(fileContent);
+    return { success: true, config };
+  } catch (error) {
+    console.error('Failed to load config:', error);
+    return { success: false, message: `Failed to parse file: ${error.message}` };
+  }
+});
+
 
 ipcMain.handle('get-hardware-concurrency', () => {
     return os.cpus().length;

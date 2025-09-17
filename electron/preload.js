@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('mining-log', subscription);
   },
   getHardwareConcurrency: () => ipcRenderer.invoke('get-hardware-concurrency'),
+  saveConfig: (configData) => ipcRenderer.invoke('save-config', configData),
+  loadConfig: () => ipcRenderer.invoke('load-config'),
 });
