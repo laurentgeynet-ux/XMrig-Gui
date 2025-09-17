@@ -1,0 +1,5 @@
+{
+  "name": "XMRig GUI Configurator",
+  "description": "A web-based graphical user interface to configure and generate command-line arguments for the XMRig miner, inspired by the aesthetics of Tari Universe.",
+  "requestFramePermissions": []
+}
