@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import Header from './components/Header';
+// FIX: Corrected the import path for the Configurator component.
 import Configurator from './components/Configurator';
 import Dashboard from './components/Dashboard';
 import Tabs from './components/Tabs';

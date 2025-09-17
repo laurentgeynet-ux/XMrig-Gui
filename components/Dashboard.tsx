@@ -9,6 +9,8 @@ interface DashboardProps {
 }
 
 const generateCommand = (config: XMRigConfig): string => {
+  // FIX: Use a platform-agnostic executable name for broader compatibility.
+  // In a real application, you'd want to bundle the correct xmrig executable.
   let cmd = 'xmrig';
   if (config.algorithm) cmd += ` --algo=${config.algorithm}`;
   if (config.coin) cmd += ` --coin=${config.coin}`;
@@ -29,7 +31,6 @@ const Dashboard: React.FC<DashboardProps> = ({ config, onStop, isRunning }) => {
   const [hashrate, setHashrate] = useState<string>('0.0 H/s');
   const terminalRef = useRef<HTMLDivElement>(null);
   const [isCopied, setIsCopied] = useState(false);
-  const logIntervalRef = useRef<number | null>(null);
 
   const parseHashrate = (logLine: string) => {
     // Regex to find hashrate reports, e.g., "speed 10s/60s/15m 8453.3 8450.1 8445.9 H/s"
@@ -50,86 +51,43 @@ const Dashboard: React.FC<DashboardProps> = ({ config, onStop, isRunning }) => {
     }
   };
 
+  // FIX: Replaced simulation logic with Electron IPC communication for real mining process management.
   useEffect(() => {
-    if (isRunning) {
-      if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+    // Only interact with Electron API if it exists on the window object.
+    if (window.electronAPI) {
+      if (isRunning) {
+        setLogs(['[SYSTEM] Démarrage du mineur...']);
+        window.electronAPI.startMining(command);
+        
+        const unsubscribe = window.electronAPI.onLog((log) => {
+          // Miner process can send multiple lines in one chunk.
+          const logLines = log.split(/\r\n|\n|\r/).filter(line => line.trim() !== '');
+          setLogs(prev => [...prev, ...logLines]);
+          logLines.forEach(parseHashrate);
+        });
 
-      // Initial startup log sequence
-      const startupLogs = [
-        '[SYSTEM] Initialisation du mineur...',
-        ' * ABOUT        XMRig/6.21.0',
-        ' * LIBS         libuv/1.44.2 OpenSSL/1.1.1q',
-        ' * HUGE PAGES   supported',
-        ' * CPU          Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz',
-        ` * THREADS      ${config.threads || 'auto'}`,
-        ` * ALGO         ${config.algorithm}`,
-        ` * POOL #1      ${config.poolUrl} algo ${config.algorithm}`,
-        `[NET]            use pool ${config.poolUrl}${config.tls ? ' TLS' : ''}`,
-        `[NET]            connecting to ${config.poolUrl}...`,
-        `[NET]            connected to ${config.poolUrl}`,
-        `[NET]            new job from ${config.poolUrl}, diff 10000`,
-      ];
-      
-      let logIndex = 0;
-      setLogs([]);
-
-      const runStartupSequence = () => {
-        if (logIndex < startupLogs.length) {
-          setLogs(prev => [...prev, startupLogs[logIndex]]);
-          logIndex++;
-        } else {
-          // End startup sequence and switch to mining loop
-          clearInterval(logIntervalRef.current!);
-          logIntervalRef.current = setInterval(generateMiningLog, 2500);
-        }
-      };
-      
-      const generateMiningLog = () => {
-         const randomChoice = Math.random();
-         let newLogLine = '';
-         
-         if (randomChoice < 0.6) { // 60% chance for hashrate report
-            const baseRate = 8450;
-            const rate10s = baseRate + (Math.random() * 40 - 20);
-            const rate60s = baseRate + (Math.random() * 20 - 10);
-            const rateMax = baseRate + 50 + (Math.random() * 20);
-            newLogLine = `[CPU] speed 10s/60s/15m ${rate10s.toFixed(1)} ${rate60s.toFixed(1)} ${baseRate.toFixed(1)} H/s max ${rateMax.toFixed(1)} H/s`;
-         } else if (randomChoice < 0.85) { // 25% chance for an accepted share
-            const ms = Math.floor(Math.random() * 20 + 40);
-            newLogLine = `[CPU] accepted (1/0) diff 10000 (${ms} ms)`;
-         } else if (randomChoice < 0.95) { // 10% chance for a new job
-            newLogLine = `[NET]            new job from ${config.poolUrl}, diff 10000`;
-         } else { // 5% chance for a rejected share or error
-            newLogLine = '[CPU]            rejected (0/1) diff 10000 "Low difficulty share"';
-         }
-         
-         setLogs(prev => [...prev, newLogLine]);
-         parseHashrate(newLogLine);
-      };
-
-      logIntervalRef.current = setInterval(runStartupSequence, 600);
-
-    } else {
-      if (logIntervalRef.current) {
-        clearInterval(logIntervalRef.current);
-        logIntervalRef.current = null;
+        // Return a cleanup function to unsubscribe and stop the miner when the component unmounts or isRunning becomes false.
+        return () => {
+          unsubscribe();
+          window.electronAPI.stopMining();
+        };
+      } else {
+        // Explicitly stop the miner if isRunning is false.
+        window.electronAPI.stopMining();
+        setHashrate('0.0 H/s'); // Reset hashrate when not running
       }
-      setHashrate('0.0 H/s'); // Reset hashrate when not running
     }
-
-    // Cleanup on unmount
-    return () => {
-      if (logIntervalRef.current) {
-        clearInterval(logIntervalRef.current);
-      }
-    };
-  }, [isRunning, config]);
+  }, [isRunning, command]);
 
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
   }, [logs]);
+
+  const handleStop = () => {
+    onStop();
+  };
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(command);
@@ -141,7 +99,7 @@ const Dashboard: React.FC<DashboardProps> = ({ config, onStop, isRunning }) => {
     <div className="space-y-6">
       <div className="bg-slate-900/50 p-4 rounded-lg shadow-lg border border-slate-700 text-center">
         <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Hashrate Actuel</h4>
-        <p className="text-4xl font-bold text-cyan-400 mt-2 animate-pulse">{hashrate}</p>
+        <p className="text-4xl font-bold text-cyan-400 mt-2">{isRunning ? hashrate : '0.0 H/s'}</p>
       </div>
 
       <div>
@@ -154,18 +112,22 @@ const Dashboard: React.FC<DashboardProps> = ({ config, onStop, isRunning }) => {
         </div>
       </div>
       <div>
-        <h3 className="text-lg font-semibold text-slate-300 mb-2">Sortie du Terminal (Simulation)</h3>
+        <h3 className="text-lg font-semibold text-slate-300 mb-2">Sortie du Terminal</h3>
         <div
           ref={terminalRef}
           className="bg-black p-4 rounded-md font-mono text-xs text-slate-300 h-64 overflow-y-auto border border-slate-700"
         >
-          {logs.map((log, index) => (
-            <p key={index}><span className="text-cyan-400 mr-2">{`[${new Date().toLocaleTimeString()}]`}</span>{log}</p>
-          ))}
+          {logs.length > 0 ? logs.map((log, index) => (
+            <p key={index}>{log.includes('[SYSTEM]') ? <span className="text-yellow-400">{log}</span> : log}</p>
+          )) : (
+            <p className="text-slate-500">
+              {isRunning ? 'Démarrage du mineur, en attente de la sortie...' : 'Le mineur est arrêté.'}
+            </p>
+          )}
         </div>
       </div>
       <div className="flex justify-center pt-4">
-        <Button onClick={onStop} variant="danger">
+        <Button onClick={handleStop} variant="danger">
           Arrêter le Minage <i className="fas fa-stop ml-2"></i>
         </Button>
       </div>

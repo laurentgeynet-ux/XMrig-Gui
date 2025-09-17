@@ -1,21 +1,48 @@
 {
-  "name": "xmrig-gui-configurator",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "xmrig-gui",
+  "version": "1.0.0",
+  "description": "XMRig GUI Configurator",
+  "main": "electron/main.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "start": "vite",
+    "build": "tsc && vite build",
+    "electron:start": "electron .",
+    "dist": "npm run build && electron-builder"
   },
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "react-dom": "^19.1.1",
-    "react": "^19.1.1"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.0.1",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.13"
+  },
+  "build": {
+    "appId": "com.xmrig-gui.app",
+    "productName": "XMRig GUI Configurator",
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "mac": {
+      "target": "dmg"
+    }
   }
 }
