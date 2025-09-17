@@ -8,10 +8,12 @@ export const COINS = [
   'monero', 'zephyr', 'wowoneiro', 'tari'
 ];
 
-export const TOR_PROXIES = [
-  '127.0.0.1:9050', // Port standard pour le démon Tor
-  '127.0.0.1:9150'  // Port standard pour le navigateur Tor
-];
+export const BLOCK_REWARDS: { [key: string]: { amount: number | null; unit: string } } = {
+  monero: { amount: 0.6, unit: 'XMR' },
+  zephyr: { amount: 3.5, unit: 'ZEPH' },
+  wowoneiro: { amount: 6.5, unit: 'WOW' },
+  tari: { amount: null, unit: 'XTR' },
+};
 
 export const DEFAULT_CONFIG: XMRigConfig = {
   algorithm: 'rx/0',
@@ -22,6 +24,4 @@ export const DEFAULT_CONFIG: XMRigConfig = {
   tls: true,
   threads: null,
   logFile: '',
-  useTor: false,
-  torProxy: '127.0.0.1:9050',
 };

@@ -8,7 +8,6 @@ export interface IElectronAPI {
   getHardwareConcurrency: () => Promise<number>;
   saveConfig: (configData: string) => Promise<{ success: boolean; message: string }>;
   loadConfig: () => Promise<{ success: boolean; config?: XMRigConfig; message?: string }>;
-  checkTorProxy: (proxyAddress: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

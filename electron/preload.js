@@ -15,5 +15,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getHardwareConcurrency: () => ipcRenderer.invoke('get-hardware-concurrency'),
   saveConfig: (configData) => ipcRenderer.invoke('save-config', configData),
   loadConfig: () => ipcRenderer.invoke('load-config'),
-  checkTorProxy: (proxyAddress) => ipcRenderer.invoke('check-tor-proxy', proxyAddress),
 });

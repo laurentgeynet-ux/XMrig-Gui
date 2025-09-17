@@ -7,6 +7,4 @@ export interface XMRigConfig {
   tls: boolean;
   threads: number | null;
   logFile: string;
-  useTor: boolean;
-  torProxy: string;
 }
