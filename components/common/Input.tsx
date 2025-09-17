@@ -7,9 +7,11 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   buttonIcon?: string;
   onButtonClick?: () => void;
+  dataListId?: string;
+  dataListOptions?: string[];
 }
 
-const Input: React.FC<InputProps> = ({ label, name, tooltip, className, error, buttonIcon, onButtonClick, ...props }) => {
+const Input: React.FC<InputProps> = ({ label, name, tooltip, className, error, buttonIcon, onButtonClick, dataListId, dataListOptions, ...props }) => {
   const errorClasses = 'border-red-500 focus:ring-red-500 focus:border-red-500';
   const defaultClasses = 'border-slate-600 focus:ring-indigo-500 focus:border-indigo-500';
   const hasButton = buttonIcon && onButtonClick;
@@ -28,9 +30,17 @@ const Input: React.FC<InputProps> = ({ label, name, tooltip, className, error, b
         <input
           id={name}
           name={name}
+          list={dataListId}
           className={`w-full bg-slate-700 border rounded-md py-2 px-3 text-slate-200 focus:outline-none focus:ring-2 transition disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed ${error ? errorClasses : defaultClasses} ${hasButton ? 'pr-10' : ''} ${className || ''}`}
           {...props}
         />
+        {dataListId && dataListOptions && (
+          <datalist id={dataListId}>
+            {dataListOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        )}
         {hasButton && (
            <button
             type="button"

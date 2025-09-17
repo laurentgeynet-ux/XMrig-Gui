@@ -18,6 +18,9 @@ const generateCommand = (config: XMRigConfig): string => {
   if (config.walletAddress) cmd += ` -u ${config.walletAddress}`;
   if (config.password) cmd += ` -p ${config.password}`;
   if (config.tls) cmd += ` --tls`;
+  if (config.useTor && config.torProxy) {
+    cmd += ` --proxy=socks5://${config.torProxy}`;
+  }
   if (config.threads) cmd += ` -t ${config.threads}`;
   if (config.logFile) cmd += ` -l ${config.logFile}`;
   return cmd;

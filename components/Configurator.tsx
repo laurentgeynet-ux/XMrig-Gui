@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { XMRigConfig } from '../types';
-import { ALGORITHMS, COINS, DEFAULT_CONFIG } from '../constants';
+import { ALGORITHMS, COINS, DEFAULT_CONFIG, TOR_PROXIES } from '../constants';
 import Input from './common/Input';
 import Select from './common/Select';
 import Toggle from './common/Toggle';
@@ -16,6 +16,35 @@ interface ConfiguratorProps {
 const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart }) => {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [torStatus, setTorStatus] = useState<'idle' | 'checking' | 'connected' | 'failed'>('idle');
+
+  useEffect(() => {
+    // We can only check the proxy in the Electron environment
+    if (!window.electronAPI || !config.useTor) {
+      setTorStatus('idle');
+      return;
+    }
+
+    const checkProxy = async () => {
+      setTorStatus('checking');
+      try {
+        const result = await window.electronAPI.checkTorProxy(config.torProxy);
+        setTorStatus(result.success ? 'connected' : 'failed');
+      } catch (err) {
+        console.error('Tor check failed:', err);
+        setTorStatus('failed');
+      }
+    };
+
+    // Simple debounce to avoid checking on every keystroke
+    const handler = setTimeout(() => {
+      checkProxy();
+    }, 500);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [config.useTor, config.torProxy]);
 
   const showFeedback = (message: string, type: 'success' | 'error') => {
     setFeedback({ message, type });
@@ -108,6 +137,44 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
     }
   };
 
+  const handleDownloadJson = () => {
+    const jsonString = JSON.stringify(config, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${config.coin || 'xmrig'}-config.json`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+    showFeedback('Configuration downloaded.', 'success');
+  };
+
+  const TorStatusIndicator = () => {
+    if (torStatus === 'idle' || !config.useTor) {
+      return null;
+    }
+
+    const statusConfig = {
+      checking: { text: 'Checking...', color: 'text-yellow-400', icon: 'fa-circle-notch fa-spin' },
+      connected: { text: 'Connected', color: 'text-green-400', icon: 'fa-check-circle' },
+      failed: { text: 'Failed', color: 'text-red-400', icon: 'fa-times-circle' },
+    }[torStatus];
+
+    if (!statusConfig) return null;
+
+    return (
+      <div className={`flex items-center text-sm ml-4 ${statusConfig.color}`}>
+        <i className={`fas ${statusConfig.icon} mr-2`}></i>
+        <span>{statusConfig.text}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8">
        <div className="flex justify-end items-center gap-4 -mb-4">
@@ -118,6 +185,9 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
         )}
         <Button onClick={handleSave} variant="secondary">
           <i className="fas fa-save mr-2"></i> Save
+        </Button>
+        <Button onClick={handleDownloadJson} variant="secondary">
+          <i className="fas fa-download mr-2"></i> Download JSON
         </Button>
         <Button onClick={handleLoad} variant="secondary">
           <i className="fas fa-folder-open mr-2"></i> Load
@@ -166,6 +236,27 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
             checked={config.tls}
             onChange={handleChange}
             tooltip="Enable encrypted connection to the pool. Recommended."
+          />
+          <div className="flex items-center">
+            <Toggle
+              label="Connect via Tor"
+              name="useTor"
+              checked={config.useTor}
+              onChange={handleChange}
+              tooltip="Route pool connection through the Tor network. Requires Tor to be running."
+            />
+            {window.electronAPI && <TorStatusIndicator />}
+          </div>
+          <Input
+            label="Tor Proxy"
+            name="torProxy"
+            value={config.torProxy}
+            onChange={handleChange}
+            placeholder="e.g., 127.0.0.1:9050"
+            tooltip="Address of your Tor SOCKS5 proxy."
+            disabled={!config.useTor}
+            dataListId="tor-proxy-list"
+            dataListOptions={TOR_PROXIES}
           />
         </Card>
 

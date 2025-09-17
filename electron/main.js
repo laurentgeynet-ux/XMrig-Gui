@@ -4,6 +4,7 @@ const path = require('node:path');
 const { spawn } = require('child_process');
 const os = require('os');
 const fs = require('node:fs');
+const net = require('node:net');
 
 // The built directory structure
 //
@@ -176,4 +177,42 @@ ipcMain.handle('load-config', async () => {
 
 ipcMain.handle('get-hardware-concurrency', () => {
     return os.cpus().length;
+});
+
+// Check Tor proxy connection
+ipcMain.handle('check-tor-proxy', async (event, proxyAddress) => {
+  return new Promise((resolve) => {
+    if (!proxyAddress || !proxyAddress.includes(':')) {
+      return resolve({ success: false, error: 'Invalid proxy address format.' });
+    }
+
+    const [host, portStr] = proxyAddress.split(':');
+    const port = parseInt(portStr, 10);
+
+    if (isNaN(port)) {
+      return resolve({ success: false, error: 'Invalid port.' });
+    }
+
+    const socket = new net.Socket();
+    const timeout = 5000; // 5 seconds
+    
+    socket.setTimeout(timeout);
+
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve({ success: true });
+    });
+
+    socket.on('error', (err) => {
+      socket.destroy();
+      resolve({ success: false, error: err.message });
+    });
+
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve({ success: false, error: 'Connection timed out.' });
+    });
+
+    socket.connect(port, host);
+  });
 });
