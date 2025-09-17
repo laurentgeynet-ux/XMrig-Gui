@@ -1,4 +1,3 @@
-
 export interface XMRigConfig {
   algorithm: string;
   coin: string;
@@ -7,7 +6,5 @@ export interface XMRigConfig {
   password: string;
   tls: boolean;
   threads: number | null;
-  donateLevel: number;
   logFile: string;
-  background: boolean;
 }

@@ -1,4 +1,3 @@
-
 import type { XMRigConfig } from './types';
 
 export const ALGORITHMS = [
@@ -17,7 +16,5 @@ export const DEFAULT_CONFIG: XMRigConfig = {
   password: 'x',
   tls: true,
   threads: null,
-  donateLevel: 5,
   logFile: '',
-  background: false,
 };

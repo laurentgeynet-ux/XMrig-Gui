@@ -19,9 +19,7 @@ const generateCommand = (config: XMRigConfig): string => {
   if (config.password) cmd += ` -p ${config.password}`;
   if (config.tls) cmd += ` --tls`;
   if (config.threads) cmd += ` -t ${config.threads}`;
-  if (config.donateLevel) cmd += ` --donate-level=${config.donateLevel}`;
   if (config.logFile) cmd += ` -l ${config.logFile}`;
-  if (config.background) cmd += ` -B`;
   return cmd;
 };
 

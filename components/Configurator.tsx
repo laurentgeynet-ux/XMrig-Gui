@@ -137,29 +137,12 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
             onButtonClick={handleAutoThreads}
           />
           <Input
-            label="Donate Level"
-            name="donateLevel"
-            type="number"
-            value={config.donateLevel}
-            onChange={handleChange}
-            min="1"
-            max="100"
-            tooltip="Percentage of mining time to donate to XMRig devs (min 1%)."
-          />
-          <Input
             label="Log File"
             name="logFile"
             value={config.logFile}
             onChange={handleChange}
             placeholder="e.g., /path/to/xmrig.log"
             tooltip="Path to a file to store miner logs. Leave blank to disable."
-          />
-           <Toggle
-            label="Run in Background"
-            name="background"
-            checked={config.background}
-            onChange={handleChange}
-            tooltip="Run the miner as a background process."
           />
         </Card>
       </div>
