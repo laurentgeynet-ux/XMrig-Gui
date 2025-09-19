@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { XMRigConfig } from '../types';
-import { ALGORITHMS, COINS, DEFAULT_CONFIG } from '../constants';
+import { ALGORITHMS, COINS, DEFAULT_CONFIG, COIN_DETAILS } from '../constants';
 import Input from './common/Input';
 import Select from './common/Select';
 import Toggle from './common/Toggle';
@@ -16,12 +16,31 @@ interface ConfiguratorProps {
 const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart }) => {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [poolHistory, setPoolHistory] = useState<string[]>([]);
+  const [walletHistory, setWalletHistory] = useState<string[]>([]);
 
   useEffect(() => {
     if (config.coin === 'tari' && config.tls) {
       setConfig(prev => ({ ...prev, tls: false }));
     }
   }, [config.coin, config.tls, setConfig]);
+
+  useEffect(() => {
+    const loadHistory = (key: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+        try {
+            const savedHistory = localStorage.getItem(key);
+            if (savedHistory) {
+                setter(JSON.parse(savedHistory));
+            }
+        } catch (error) {
+            console.error(`Failed to load history for ${key} from localStorage:`, error);
+            localStorage.removeItem(key);
+        }
+    };
+
+    loadHistory('poolUrlHistory', setPoolHistory);
+    loadHistory('walletAddressHistory', setWalletHistory);
+  }, []);
 
   const showFeedback = (message: string, type: 'success' | 'error') => {
     setFeedback({ message, type });
@@ -32,15 +51,32 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    
-    if (type === 'checkbox') {
-        const { checked } = e.target as HTMLInputElement;
-        setConfig(prev => ({ ...prev, [name]: checked }));
-    } else if (type === 'number') {
-        setConfig(prev => ({ ...prev, [name]: value === '' ? null : Number(value) }));
-    } else {
-        setConfig(prev => ({ ...prev, [name]: value }));
-    }
+
+    setConfig(prev => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let updatedValue: any;
+      if (type === 'checkbox') {
+        updatedValue = (e.target as HTMLInputElement).checked;
+      } else if (type === 'number') {
+        updatedValue = value === '' ? null : Number(value);
+      } else {
+        updatedValue = value;
+      }
+
+      const newConfig = { ...prev, [name]: updatedValue };
+
+      // When the coin is changed, update related fields with defaults
+      if (name === 'coin') {
+        const details = COIN_DETAILS[value as keyof typeof COIN_DETAILS];
+        if (details) {
+          newConfig.algorithm = details.algorithm;
+          newConfig.poolUrl = details.poolUrl;
+          newConfig.tls = details.tls;
+        }
+      }
+
+      return newConfig;
+    });
   };
 
   const validateConfig = (): boolean => {
@@ -59,6 +95,29 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
 
   const handleStart = () => {
     if (validateConfig()) {
+      const updateHistory = (
+        key: string, 
+        value: string, 
+        history: string[], 
+        setter: React.Dispatch<React.SetStateAction<string[]>>
+      ) => {
+        if (!value) return; // Do not save empty values
+        const updatedHistory = [
+          value,
+          ...history.filter(item => item !== value)
+        ].slice(0, 10);
+        
+        setter(updatedHistory);
+        try {
+          localStorage.setItem(key, JSON.stringify(updatedHistory));
+        } catch (error) {
+          console.error(`Failed to save ${key} to localStorage:`, error);
+        }
+      };
+
+      updateHistory('poolUrlHistory', config.poolUrl, poolHistory, setPoolHistory);
+      updateHistory('walletAddressHistory', config.walletAddress, walletHistory, setWalletHistory);
+      
       onStart();
     }
   };
@@ -78,6 +137,22 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
       setConfig(prev => ({...prev, threads: threadCount}));
     }
   }
+
+  const handleSelectLogFile = async () => {
+    if (window.electronAPI) {
+      try {
+        const filePath = await window.electronAPI.selectLogFile();
+        if (filePath) {
+          setConfig(prev => ({ ...prev, logFile: filePath }));
+        }
+      } catch (err) {
+        console.error("Error selecting log file:", err);
+        showFeedback("An error occurred while selecting the log file.", 'error');
+      }
+    } else {
+      showFeedback('File browser is only available in the desktop app.', 'error');
+    }
+  };
 
   const handleSave = async () => {
     if (window.electronAPI) {
@@ -131,6 +206,19 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
     showFeedback('Configuration downloaded.', 'success');
   };
 
+  const handleClearHistory = () => {
+    try {
+      localStorage.removeItem('poolUrlHistory');
+      localStorage.removeItem('walletAddressHistory');
+      setPoolHistory([]);
+      setWalletHistory([]);
+      showFeedback('Input history has been cleared.', 'success');
+    } catch (error) {
+      console.error('Failed to clear history from localStorage:', error);
+      showFeedback('Failed to clear input history.', 'error');
+    }
+  };
+
   return (
     <div className="space-y-8">
        <div className="flex justify-end items-center gap-4 -mb-4">
@@ -157,7 +245,7 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
             name="coin"
             value={config.coin}
             onChange={handleChange}
-            options={COINS.map(c => ({ value: c, label: c }))}
+            options={COINS.map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))}
             tooltip="Select the coin you want to mine."
           />
           <Input
@@ -166,8 +254,9 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
             value={config.poolUrl}
             onChange={handleChange}
             placeholder="e.g., pool.supportxmr.com:443"
-            tooltip="The URL of your mining pool, including the port."
+            tooltip="The URL of your mining pool, including the port. Click to see recent pools."
             error={errors.poolUrl}
+            dataListOptions={poolHistory}
           />
           <Input
             label="Wallet Address"
@@ -175,8 +264,9 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
             value={config.walletAddress}
             onChange={handleChange}
             placeholder="Your wallet address"
-            tooltip="The public address of your wallet where rewards will be sent."
+            tooltip="The public address of your wallet where rewards will be sent. Click to see recent addresses."
             error={errors.walletAddress}
+            dataListOptions={walletHistory}
           />
           <Input
             label="Worker Name (Optional)"
@@ -202,6 +292,16 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
             tooltip="Enable encrypted connection to the pool. Recommended. Not compatible with Tari."
             disabled={config.coin === 'tari'}
           />
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={handleClearHistory}
+              className="text-xs font-medium text-slate-500 hover:text-red-400 transition-colors duration-200"
+              aria-label="Clear pool and wallet history"
+            >
+              <i className="fas fa-trash-alt mr-2"></i>
+              Clear History
+            </button>
+          </div>
         </Card>
 
         <Card title="Miner Settings" icon="fa-cogs">
@@ -232,6 +332,15 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
             onChange={handleChange}
             placeholder="e.g., /path/to/xmrig.log"
             tooltip="Path to a file to store miner logs. Leave blank to disable."
+            buttonIcon="fa-folder-open"
+            onButtonClick={handleSelectLogFile}
+          />
+          <Toggle
+            label="Auto-start on launch"
+            name="autoStart"
+            checked={!!config.autoStart}
+            onChange={handleChange}
+            tooltip="If enabled, the miner will start automatically with the current configuration when you open the application."
           />
         </Card>
       </div>

@@ -1,3 +1,5 @@
+export type MinerStatus = 'stopped' | 'mining' | 'error';
+
 export interface XMRigConfig {
   algorithm: string;
   coin: string;
@@ -8,6 +10,5 @@ export interface XMRigConfig {
   tls: boolean;
   threads: number | null;
   logFile: string;
-  // FIX: Added 'autoStart' to match the type definition used by the Electron API.
   autoStart: boolean;
 }

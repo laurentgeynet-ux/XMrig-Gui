@@ -20,8 +20,11 @@ export const DEFAULT_CONFIG: XMRigConfig = {
   coin: 'monero',
   poolUrl: 'pool.supportxmr.com:443',
   walletAddress: '',
+  workerName: '',
   password: 'x',
   tls: true,
   threads: null,
   logFile: '',
+  // FIX: Added 'autoStart' property to match the updated XMRigConfig interface.
+  autoStart: false,
 };

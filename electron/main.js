@@ -1,5 +1,5 @@
 // electron/main.js
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('node:path');
 const { spawn } = require('child_process');
 const os = require('os');
@@ -21,6 +21,101 @@ let win;
 // 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 let xmrigProcess = null;
+let isStoppingGracefully = false;
+
+const USER_DATA_PATH = app.getPath('userData');
+const CONFIG_FILE_PATH = path.join(USER_DATA_PATH, 'config.json');
+
+const sendStatus = (status) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('mining-status', status);
+  }
+};
+
+const generateArgs = (config) => {
+  const args = [];
+  if (config.algorithm) args.push(`--algo=${config.algorithm}`);
+  if (config.coin) args.push(`--coin=${config.coin}`);
+  if (config.poolUrl) args.push('-o', config.poolUrl);
+  if (config.walletAddress) {
+    let user = config.walletAddress;
+    const worker = config.workerName?.trim();
+    if (worker) {
+      user += `.${worker}`;
+    }
+    args.push('-u', user);
+  }
+  if (config.password) args.push('-p', config.password);
+  if (config.tls) args.push('--tls');
+  if (config.threads && config.threads > 0) args.push('-t', String(config.threads));
+
+  const logFile = config.logFile?.trim();
+  if (logFile) {
+    args.push('-l', logFile);
+  }
+
+  return args;
+};
+
+function startMiner(config) {
+  if (xmrigProcess) {
+    console.log('Miner is already running.');
+    return;
+  }
+
+  const args = generateArgs(config);
+  const cmd = 'xmrig';
+  
+  isStoppingGracefully = false;
+  console.log(`Starting miner with command: ${cmd} ${args.join(' ')}`);
+  
+  try {
+    xmrigProcess = spawn(cmd, args);
+    sendStatus('mining');
+  } catch(err) {
+    console.error('Failed to start xmrig process:', err);
+    if(win && !win.isDestroyed()) {
+      win.webContents.send('mining-log', `[SYSTEM] Failed to start miner: ${err.message}. Make sure xmrig is in your system PATH.`);
+    }
+    sendStatus('error');
+    xmrigProcess = null;
+    return;
+  }
+
+  const sendLog = (data) => {
+      const log = data.toString();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('mining-log', log);
+      }
+  };
+
+  xmrigProcess.stdout.on('data', sendLog);
+  xmrigProcess.stderr.on('data', sendLog);
+
+  xmrigProcess.on('close', (code) => {
+      console.log(`xmrig process exited with code ${code}`);
+      if(win && !win.isDestroyed()) {
+        win.webContents.send('mining-log', `[SYSTEM] Miner process stopped with code ${code}.`);
+      }
+      if (isStoppingGracefully) {
+          sendStatus('stopped');
+      } else if (code !== 0) {
+          sendStatus('error');
+      } else {
+          sendStatus('stopped');
+      }
+      xmrigProcess = null;
+  });
+
+  xmrigProcess.on('error', (err) => {
+      console.error('Failed to start xmrig process:', err);
+      if(win && !win.isDestroyed()) {
+        win.webContents.send('mining-log', `[SYSTEM] Failed to start miner: ${err.message}. Make sure xmrig is in your system PATH.`);
+      }
+      sendStatus('error');
+      xmrigProcess = null;
+  });
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -30,7 +125,6 @@ function createWindow() {
     minHeight: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      // It is recommended to disable nodeIntegration and enable contextIsolation for security.
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -38,23 +132,29 @@ function createWindow() {
     title: "XMRig GUI Configurator",
   });
 
-  // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString());
   });
 
+  win.webContents.on('context-menu', (event, params) => {
+    const { x, y } = params;
+    Menu.buildFromTemplate([
+      { label: 'Cut', role: 'cut', enabled: params.editFlags.canCut },
+      { label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy },
+      { label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste },
+      { type: 'separator' },
+      { label: 'Select All', role: 'selectAll', enabled: params.editFlags.canSelectAll },
+    ]).popup({ window: win, x, y });
+  });
+
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
-    // Open devtools in development
     win.webContents.openDevTools();
   } else {
     win.loadFile(path.join(process.env.DIST, 'index.html'));
   }
 }
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (xmrigProcess) {
     xmrigProcess.kill();
@@ -66,68 +166,42 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
 
-// FIX: Added IPC Handlers for managing the xmrig mining process.
-ipcMain.on('start-mining', (event, command) => {
-    if (xmrigProcess) {
-      console.log('Miner is already running.');
-      return;
+  // Auto-start logic
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const fileContent = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+      const config = JSON.parse(fileContent);
+      if (config && config.autoStart) {
+        console.log('Auto-starting miner based on saved configuration...');
+        startMiner(config);
+      }
     }
+  } catch(error) {
+    console.error('Error during auto-start procedure:', error);
+  }
+});
 
-    // Command parsing needs to be robust. Assuming 'xmrig' is the command.
-    const args = command.substring(command.indexOf(' ') + 1).split(' ');
-    const cmd = command.split(' ')[0];
-    
-    console.log(`Starting miner with command: ${cmd} ${args.join(' ')}`);
-    // Note: This assumes 'xmrig' is in the system's PATH. For a distributable app,
-    // you'd bundle the binary and reference its path.
-    xmrigProcess = spawn(cmd, args);
-
-    const sendLog = (data) => {
-        const log = data.toString();
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('mining-log', log);
-        }
-    };
-
-    xmrigProcess.stdout.on('data', sendLog);
-    xmrigProcess.stderr.on('data', sendLog);
-
-    xmrigProcess.on('close', (code) => {
-        console.log(`xmrig process exited with code ${code}`);
-        if(win && !win.isDestroyed()) {
-          win.webContents.send('mining-log', `[SYSTEM] Miner process stopped with code ${code}.`);
-        }
-        xmrigProcess = null;
-    });
-
-    xmrigProcess.on('error', (err) => {
-        console.error('Failed to start xmrig process:', err);
-        if(win && !win.isDestroyed()) {
-          win.webContents.send('mining-log', `[SYSTEM] Failed to start miner: ${err.message}. Make sure xmrig is in your system PATH.`);
-        }
-        xmrigProcess = null;
-    });
+ipcMain.on('start-mining', (event, config) => {
+    startMiner(config);
 });
 
 ipcMain.on('stop-mining', () => {
     if (xmrigProcess) {
         console.log('Stopping miner...');
-        // SIGINT is the correct signal for graceful shutdown (Ctrl+C).
+        isStoppingGracefully = true;
         xmrigProcess.kill('SIGINT');
-        xmrigProcess = null;
     }
 });
 
-// Handle saving configuration to a file
+// Handle saving configuration to a user-selected file
 ipcMain.handle('save-config', async (event, configData) => {
   if (!win) return { success: false, message: 'Main window not available.' };
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
@@ -149,7 +223,7 @@ ipcMain.handle('save-config', async (event, configData) => {
   }
 });
 
-// Handle loading configuration from a file
+// Handle loading configuration from a user-selected file
 ipcMain.handle('load-config', async () => {
   if (!win) return { success: false, message: 'Main window not available.' };
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
@@ -173,7 +247,44 @@ ipcMain.handle('load-config', async () => {
   }
 });
 
+// Handle selecting a log file path
+ipcMain.handle('select-log-file', async () => {
+  if (!win) return null;
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Select Log File Location',
+    defaultPath: 'xmrig.log',
+    filters: [{ name: 'Log Files', extensions: ['log'] }, { name: 'All Files', extensions: ['*'] }],
+  });
+
+  if (canceled || !filePath) {
+    return null;
+  }
+  return filePath;
+});
 
 ipcMain.handle('get-hardware-concurrency', () => {
     return os.cpus().length;
+});
+
+// Handle saving app configuration automatically
+ipcMain.handle('save-app-config', async (event, configData) => {
+  try {
+    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(configData, null, 2));
+  } catch (error) {
+    console.error('Failed to save app config:', error);
+  }
+});
+
+// Handle loading app configuration automatically
+ipcMain.handle('load-app-config', async () => {
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const fileContent = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+      return JSON.parse(fileContent);
+    }
+  } catch (error) {
+    console.error('Failed to load app config:', error);
+    // If file is corrupt, it's safer to return null and let the app use defaults
+  }
+  return null;
 });

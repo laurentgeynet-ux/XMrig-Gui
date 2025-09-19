@@ -16,7 +16,13 @@ const generateCommand = (config: XMRigConfig): string => {
   if (config.algorithm) cmd += ` --algo=${config.algorithm}`;
   if (config.coin) cmd += ` --coin=${config.coin}`;
   if (config.poolUrl) cmd += ` -o ${config.poolUrl}`;
-  if (config.walletAddress) cmd += ` -u ${config.walletAddress}`;
+  if (config.walletAddress) {
+    let user = config.walletAddress;
+    if (config.workerName && config.workerName.trim() !== '') {
+      user += `.${config.workerName.trim()}`;
+    }
+    cmd += ` -u ${user}`;
+  }
   if (config.password) cmd += ` -p ${config.password}`;
   if (config.tls) cmd += ` --tls`;
   if (config.threads) cmd += ` -t ${config.threads}`;
@@ -78,7 +84,8 @@ const Dashboard: React.FC<DashboardProps> = ({ config, onStop, isRunning }) => {
       if (isRunning) {
         setLogs(['[SYSTEM] Démarrage du mineur...']);
         setLastBlockReward(null); // Reset on start
-        window.electronAPI.startMining(command);
+        // FIX: The electron API expects the config object, not the generated command string.
+        window.electronAPI.startMining(config);
         
         const unsubscribe = window.electronAPI.onLog((log) => {
           // Miner process can send multiple lines in one chunk.
@@ -101,7 +108,7 @@ const Dashboard: React.FC<DashboardProps> = ({ config, onStop, isRunning }) => {
         setHashrate('0.0 H/s'); // Reset hashrate when not running
       }
     }
-  }, [isRunning, command]);
+  }, [isRunning, config]);
 
   useEffect(() => {
     if (terminalRef.current) {
