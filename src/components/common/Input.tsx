@@ -5,6 +5,7 @@ import TooltipIcon from './TooltipIcon';
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   tooltip?: string;
+  // Add any other props that TooltipIcon expects here, if they are passed from Input
   error?: string;
   buttonIcon?: string;
   onButtonClick?: () => void;
@@ -49,7 +50,7 @@ const Input: React.FC<InputProps> = ({ label, name, tooltip, className, error, b
           <label htmlFor={name} className="block text-sm font-medium text-slate-400">
             {label}
           </label>
-          {tooltip && <TooltipIcon text={tooltip} />}
+          {tooltip && <TooltipIcon tooltip={tooltip} />}
         </div>
       )}
       <div className="relative">

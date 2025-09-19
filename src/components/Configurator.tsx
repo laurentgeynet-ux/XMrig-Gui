@@ -239,7 +239,7 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card title="Pool Connection" icon="fa-server">
+        <Card title="Pool Connection">
           <Select
             label="Coin"
             name="coin"
@@ -304,7 +304,7 @@ const Configurator: React.FC<ConfiguratorProps> = ({ config, setConfig, onStart 
           </div>
         </Card>
 
-        <Card title="Miner Settings" icon="fa-cogs">
+        <Card title="Miner Settings">
           <Select
             label="Algorithm"
             name="algorithm"
