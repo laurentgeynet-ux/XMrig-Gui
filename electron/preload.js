@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveConfig: (configData) => ipcRenderer.invoke('save-config', configData),
   loadConfig: () => ipcRenderer.invoke('load-config'),
   selectLogFile: () => ipcRenderer.invoke('select-log-file'),
+  fetchPoolStats: (url) => ipcRenderer.invoke('fetch-pool-stats', url),
   saveAppConfig: (configData) => ipcRenderer.invoke('save-app-config', configData),
   loadAppConfig: () => ipcRenderer.invoke('load-app-config'),
 });

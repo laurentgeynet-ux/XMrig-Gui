@@ -1,5 +1,5 @@
 // electron/main.js
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, net } = require('electron');
 const path = require('node:path');
 const { spawn } = require('child_process');
 const os = require('os');
@@ -129,7 +129,7 @@ function createWindow() {
       contextIsolation: true,
     },
     icon: path.join(process.env.VITE_PUBLIC, 'icon.png'),
-    title: "XMRig GUI Configurator",
+    title: "XMRig GUI Configurator by Loulach",
   });
 
   win.webContents.on('did-finish-load', () => {
@@ -199,6 +199,55 @@ ipcMain.on('stop-mining', () => {
         isStoppingGracefully = true;
         xmrigProcess.kill('SIGINT');
     }
+});
+
+// Handle fetching pool stats from the main process to avoid CORS issues
+ipcMain.handle('fetch-pool-stats', async (event, requestUrl) => {
+  return new Promise((resolve) => {
+    const request = net.request({
+      url: requestUrl,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json',
+      },
+    });
+    let body = '';
+    
+    request.on('response', (response) => {
+      const contentType = response.headers['content-type'];
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        resolve({ success: false, error: `API returned status ${response.statusCode}` });
+        return;
+      }
+      
+      response.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      
+      response.on('end', () => {
+        if (!body.trim()) {
+            console.error(`Received empty body from ${requestUrl}. Content-Type: ${contentType}.`);
+            resolve({ success: false, error: 'Empty response from API' });
+            return;
+        }
+        try {
+          const data = JSON.parse(body);
+          resolve({ success: true, data });
+        } catch (error) {
+          console.error(`Failed to parse pool stats JSON from ${requestUrl}. Content-Type: ${contentType}. Body: ${body.substring(0, 200)}...`);
+          resolve({ success: false, error: 'Failed to parse JSON response' });
+        }
+      });
+    });
+    
+    request.on('error', (error) => {
+      console.error(`Failed to fetch pool stats from ${requestUrl}:`, error);
+      resolve({ success: false, error: 'API request failed' });
+    });
+    
+    request.end();
+  });
 });
 
 // Handle saving configuration to a user-selected file

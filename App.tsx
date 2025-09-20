@@ -6,12 +6,10 @@ import Tabs from './components/Tabs';
 import type { XMRigConfig, MinerStatus, Tab } from './types';
 import { DEFAULT_CONFIG } from './constants';
 import AboutModal from './components/AboutModal';
-// import packageJsonData from '../package.json';
-// import metadataJsonData from '../metadata.json';
 
-// WORKAROUND: Hardcode metadata to debug module resolution error.
-const packageJson = { version: '1.0.0' };
-const metadata = {
+// WORKAROUND: Hardcode metadata to resolve module resolution error.
+const packageJsonData = { version: '1.0.0' };
+const metadataJsonData = {
   name: 'XMRig GUI Configurator',
   description: 'A web-based graphical user interface to configure and generate command-line arguments for the XMRig miner, inspired by the aesthetics of Tari Universe.',
 };
@@ -129,9 +127,9 @@ const App: React.FC = () => {
       <AboutModal
         isOpen={isAboutModalOpen}
         onClose={() => setIsAboutModalOpen(false)}
-        name={metadata.name}
-        version={packageJson.version}
-        description={metadata.description}
+        name={metadataJsonData.name}
+        version={packageJsonData.version}
+        description={metadataJsonData.description}
       />
     </>
   );
